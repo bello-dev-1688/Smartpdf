@@ -1,10 +1,16 @@
 from pathlib import Path
 import shutil
+import tempfile
+
 import pymupdf
 
 from pdf_form_filler.core.errors import FieldNotFoundError, InvalidFieldError
 from pdf_form_filler.documents.storage import DocumentStorage
 from pdf_form_filler.documents.inspector import DocumentInspector
+from pdf_form_filler.documents.image_converter import (
+    is_supported_image,
+    image_to_pdf,
+)
 from pdf_form_filler.fields.image_fields import ImageFieldManager
 from pdf_form_filler.fields.values import FieldValueManager
 from pdf_form_filler.forms.native import NativeForm
@@ -14,7 +20,7 @@ from pdf_form_filler.signatures.manager import SignatureManager
 
 
 class DocumentService:
-    """Coordinates document operations; detailed work lives in focused modules."""
+    """Coordinates document operations across the application."""
 
     def __init__(self, storage_dir="data/documents"):
         self.storage = DocumentStorage(storage_dir)
@@ -24,6 +30,40 @@ class DocumentService:
         self.signatures = SignatureManager()
 
     def upload(self, source_path, filename=None):
+        """
+        Store a PDF or raster image as a SmartPDF document.
+
+        PDFs enter the existing pipeline unchanged.
+        Raster images are converted to a one-page PDF first, then enter
+        the same image-form pipeline used by scanned PDFs.
+        """
+        source_path = Path(source_path)
+        original_name = filename or source_path.name
+        original_suffix = Path(original_name).suffix.lower()
+
+        if is_supported_image(Path(original_name)):
+            temp_path = None
+
+            try:
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=".pdf",
+                ) as temp:
+                    temp_path = Path(temp.name)
+
+                image_to_pdf(source_path, temp_path)
+                return self.storage.create(temp_path)
+
+            finally:
+                if temp_path is not None:
+                    temp_path.unlink(missing_ok=True)
+
+        if original_suffix != ".pdf":
+            raise ValueError(
+                "Unsupported document format. "
+                "Upload a PDF or a PNG/JPG/JPEG/BMP/WEBP image."
+            )
+
         return self.storage.create(source_path)
 
     def inspect(self, document_id):
@@ -79,7 +119,6 @@ class DocumentService:
                 for field in NativeForm(document).discover_fields()
             }
 
-            # Native PDF signature field
             if field_id in native:
                 field = native[field_id]
 
@@ -90,14 +129,11 @@ class DocumentService:
 
                 self.signatures.apply(document, field, image_path)
 
-                # IMPORTANT:
-                # Use document_id here, not the PDFDocument object.
                 working_path = self.storage.working(document_id)
                 temp_path = working_path.with_suffix(".tmp.pdf")
 
                 document.save(temp_path)
                 document.close()
-
                 temp_path.replace(working_path)
 
                 return {
@@ -106,7 +142,6 @@ class DocumentService:
                     "status": "signature_applied",
                 }
 
-            # Manually mapped image-form signature
             data = self.storage.read_image_fields(document_id)
 
             if field_id not in data:
@@ -118,8 +153,8 @@ class DocumentService:
                 )
 
             path = self.signatures.validator.validate(image_path)
-
             suffix = path.suffix.lower()
+
             destination = (
                 self.storage.directory(document_id)
                 / f"signature_{field_id}{suffix}"
