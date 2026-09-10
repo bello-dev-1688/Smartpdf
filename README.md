@@ -22,7 +22,6 @@ Implemented:
 
 ## Architecture
 
-```text
 Web Frontend
      |
      v
@@ -39,7 +38,7 @@ DocumentService
      |
      v
 DocumentStorage
-
+##
 Repository
 
 Smartpdf/
