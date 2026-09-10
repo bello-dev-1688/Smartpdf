@@ -1,29 +1,81 @@
-# PDF Form Filler — Backend
+# SmartPDF
 
-This is the backend-first refactor. The production client will be a web frontend built later. The backend is also directly testable through `dev_cli.py` and the Python service layer.
+SmartPDF is a general-purpose PDF form filler built with **FastAPI** and **PyMuPDF**. It supports native fillable PDFs, scanned PDFs, and image-based forms.
+
+## Status
+
+Backend-first MVP with a separate web frontend.
+
+Implemented:
+- Native PDF field discovery.
+- Native text and checkbox filling.
+- Native signature-field detection and signature upload.
+- PDF and PNG/JPG/JPEG/BMP/WEBP uploads.
+- Image-to-PDF conversion.
+- Manual mapping for scanned/image forms.
+- Normalized `0..1` coordinates.
+- Mapped text, checkbox, and signature fields.
+- Field move, resize, and delete.
+- PDF page rendering.
+- Explicit PDF export.
+- Separate source and working documents.
 
 ## Architecture
-- FastAPI HTTP API
-- PyMuPDF PDF engine
-- Native AcroForm widget discovery
-- Manual mapping for scanned/image forms
-- Normalized 0..1 coordinates for device/viewport independence
-- Signature image placement
-- File-based document workspace for development
 
-## Run
-```powershell
-pip install -r requirements.txt
-python main.py
-```
-Then open `/docs` on the local server.
+```text
+Web Frontend
+     |
+     v
+FastAPI API
+     |
+     v
+DocumentService
+     |
+     +--> Native Forms
+     +--> Image Form Mapping
+     +--> Field Values
+     +--> Signatures
+     +--> Rendering / Export
+     |
+     v
+DocumentStorage
 
-## No frontend testing
-```powershell
-python dev_cli.py inspect sample.pdf
-pytest
-```
-The CLI uses the same `DocumentService` used by FastAPI.
+Repository
 
-## Scanned form contract
-The future frontend draws a rectangle using mouse or touch and sends normalized coordinates: `x`, `y`, `width`, `height` in the range 0..1. The backend converts those coordinates to PDF points. No screen pixels are stored.
+Smartpdf/
+├── backend/
+│   ├── main.py
+│   ├── dev_cli.py
+│   ├── requirements.txt
+│   ├── docs/
+│   └── pdf_form_filler/
+└── frontend/
+
+Important backend areas:
+
+api/          FastAPI routes
+core/         Models, coordinates, errors
+documents/    Storage and document lifecycle
+fields/       Field mapping and values
+forms/        Native/image form logic
+pdf/          PDF handling
+services/     Application orchestration
+signatures/   Signature handling
+
+API documentation: http://127.0.0.1:8000/docs
+
+MVP Workflow
+
+Upload
+  ↓
+Inspect
+  ↓
+Native fields OR manual mapping
+  ↓
+Fill / Sign
+  ↓
+Save working state
+  ↓
+Explicit Export
+
+NOTE: SmartPDF is intended to remain a general-purpose PDF form filler,in the sense that it can support native pdf forms, scanned pdf forms and image forms , not a form-specific implementation.
